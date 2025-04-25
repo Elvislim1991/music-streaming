@@ -23,12 +23,12 @@ export KAFKA_HOST=<your-raspberry-pi-ip>
 
 1. Start Kafka first:
 ```
-docker-compose -f kafka-docker-compose.yml up -d
+docker compose -f kafka-docker-compose.yml up -d
 ```
 
 2. Start Spark:
 ```
-docker-compose -f spark-docker-compose.yml up -d
+docker compose -f spark-docker-compose.yml up -d
 ```
 
 3. Check that all services are running:
