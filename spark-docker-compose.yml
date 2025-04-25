@@ -1,0 +1,35 @@
+networks:
+  streaming-network:
+    external: true
+
+services:
+  spark-master:
+    image: bitnami/spark:3.5.5
+    platform: linux/arm64
+    container_name: spark-master
+    networks:
+      - streaming-network
+    environment:
+      - SPARK_MODE=master
+      - SPARK_MASTER_HOST=spark-master
+      - SPARK_MASTER_PORT=7077
+      - SPARK_UI_PORT=8080
+    ports:
+      - "7077:7077"    # Spark master port
+      - "8080:8080"    # Spark UI
+
+  spark-worker:
+    image: bitnami/spark:3.5.0
+    platform: linux/arm64
+    container_name: spark-worker
+    networks:
+      - streaming-network
+    depends_on:
+      - spark-master
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - SPARK_WORKER_MEMORY=512M
+      - SPARK_WORKER_CORES=1
+    ports:
+      - "8082:8081"    # Worker UI (optional)
