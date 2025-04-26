@@ -291,6 +291,19 @@ generate_streaming_data() {
 load_dimension_data() {
     print_section "Loading Dimension Data into PostgreSQL"
 
+    # Copy the PostgreSQL JDBC driver to the Spark master container
+    echo "Downloading PostgreSQL JDBC driver..."
+    if [ ! -f postgresql-42.5.0.jar ]; then
+        wget https://jdbc.postgresql.org/download/postgresql-42.5.0.jar
+    fi
+
+    echo "Copying PostgreSQL JDBC driver to Spark master container..."
+    docker cp postgresql-42.5.0.jar spark-master:/opt/bitnami/spark/jars/
+
+    # Copy the Spark streaming job to the Spark master container
+    echo "Copying Spark streaming job to Spark master container..."
+    docker cp spark_streaming_job.py spark-master:/opt/bitnami/spark/
+
     # Copy the dimension data loader script to the Spark master container
     echo "Copying dimension data loader script to Spark master container..."
     docker cp dimension_data_loader.py spark-master:/opt/bitnami/spark/
@@ -305,19 +318,6 @@ load_dimension_data() {
 # Function to process streaming data with Spark
 process_streaming_data() {
     print_section "Processing Streaming Data with Spark"
-
-    # Copy the PostgreSQL JDBC driver to the Spark master container
-    echo "Downloading PostgreSQL JDBC driver..."
-    if [ ! -f postgresql-42.5.0.jar ]; then
-        wget https://jdbc.postgresql.org/download/postgresql-42.5.0.jar
-    fi
-
-    echo "Copying PostgreSQL JDBC driver to Spark master container..."
-    docker cp postgresql-42.5.0.jar spark-master:/opt/bitnami/spark/jars/
-
-    # Copy the Spark streaming job to the Spark master container
-    echo "Copying Spark streaming job to Spark master container..."
-    docker cp spark_streaming_job.py spark-master:/opt/bitnami/spark/
 
     # Execute the Spark streaming job
     echo "Executing Spark streaming job..."
