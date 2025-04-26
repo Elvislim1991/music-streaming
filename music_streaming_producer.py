@@ -12,7 +12,7 @@ from kafka.errors import KafkaError, KafkaTimeoutError, NoBrokersAvailable
 
 # Parse command line arguments
 parser = argparse.ArgumentParser(description='Generate and send music streaming data to Kafka')
-parser.add_argument('--internal', action='store_true', help='Use internal Kafka bootstrap server (broker:29092)')
+parser.add_argument('--internal', action='store_true', help='Use internal Kafka bootstrap server (broker:9092)')
 parser.add_argument('--external', action='store_true', help='Use external Kafka bootstrap server (KAFKA_HOST:9092)')
 args = parser.parse_args()
 
@@ -25,8 +25,8 @@ use_external = args.external or os.environ.get('USE_EXTERNAL_KAFKA', 'false').lo
 
 # If both are specified, internal takes precedence
 if use_internal:
-    bootstrap_servers = 'broker:29092'
-    print("Using internal Kafka bootstrap server: broker:29092")
+    bootstrap_servers = 'broker:9092'
+    print("Using internal Kafka bootstrap server: broker:9092")
 elif use_external:
     # Get Kafka host from environment variable or use the hostname if not set
     kafka_host = os.environ.get('KAFKA_HOST')
@@ -44,8 +44,8 @@ elif use_external:
     print(f"Using external Kafka bootstrap server: {bootstrap_servers}")
 else:
     # Default to internal for better compatibility with consumer commands
-    bootstrap_servers = 'broker:29092'
-    print("Using default internal Kafka bootstrap server: broker:29092")
+    bootstrap_servers = 'broker:9092'
+    print("Using default internal Kafka bootstrap server: broker:9092")
 
 print(f"Attempting to connect to Kafka at {bootstrap_servers}")
 
