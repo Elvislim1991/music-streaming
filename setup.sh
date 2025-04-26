@@ -119,6 +119,28 @@ start_kafka() {
 create_kafka_topics() {
     print_section "Creating Kafka Topics"
 
+    # Check if broker hostname is resolvable
+    if ! ping -c 1 broker > /dev/null 2>&1; then
+        echo "Hostname 'broker' is not resolvable. Adding to /etc/hosts..."
+        # Check if we have sudo access
+        if command -v sudo > /dev/null 2>&1; then
+            # Add broker to /etc/hosts if not already there
+            if ! grep -q "broker" /etc/hosts; then
+                echo "Adding 'broker' to /etc/hosts (requires sudo)..."
+                echo "127.0.0.1 broker" | sudo tee -a /etc/hosts > /dev/null
+                echo "Added 'broker' to /etc/hosts"
+            else
+                echo "'broker' is already in /etc/hosts"
+            fi
+        else
+            echo "Warning: Cannot add 'broker' to /etc/hosts (sudo not available)"
+            echo "You may need to manually add '127.0.0.1 broker' to /etc/hosts"
+            echo "Alternatively, use the --external option with KAFKA_HOST set to your IP address"
+        fi
+    else
+        echo "Hostname 'broker' is resolvable"
+    fi
+
     # Create Kafka topics
     if [ "$USE_EXTERNAL" = true ]; then
         echo "Using external bootstrap server..."

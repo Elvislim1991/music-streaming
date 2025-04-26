@@ -126,13 +126,22 @@ If the script gets stuck when creating Kafka topics (especially on Raspberry Pi)
    sudo ufw status
    ```
 
-The setup script now includes improved error handling and will automatically try alternative connection methods if the default one fails.
+6. **Hostname Resolution Issues**: If you see errors like "Server lookup failure: broker:9092, No address associated with hostname", this means the hostname "broker" cannot be resolved to an IP address. The setup script now includes automatic hostname resolution checks and will:
+   - Try to add "broker" to your /etc/hosts file (requires sudo)
+   - Automatically fall back to using "localhost" instead of "broker" if the hostname is not resolvable
 
-6. **Kafka Configuration Errors**: If you see errors like "KafkaConfigurationError: Unrecognized configs", this usually means there's an incompatibility between the Kafka client library and the version of kafka-python installed:
+   If you still encounter hostname resolution issues, you can manually add an entry to your /etc/hosts file:
+   ```bash
+   echo "127.0.0.1 broker" | sudo tee -a /etc/hosts
+   ```
+
+7. **Kafka Configuration Errors**: If you see errors like "KafkaConfigurationError: Unrecognized configs", this usually means there's an incompatibility between the Kafka client library and the version of kafka-python installed:
    ```
    Error connecting to Kafka at broker:29092: KafkaConfigurationError: Unrecognized configs: {'socket_timeout_ms'}
    ```
    This has been fixed in the latest version of the script, but if you encounter similar errors with other parameters, you may need to update your kafka-python library or modify the script to remove the unsupported parameters.
+
+The setup script now includes improved error handling and will automatically try alternative connection methods if the default one fails.
 
 ## Shutting Down
 
