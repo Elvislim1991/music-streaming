@@ -50,6 +50,7 @@ This project implements a real-time music streaming analytics pipeline using Apa
   - Hourly aggregated metrics
 - Configured Spark to write all metrics directly to PostgreSQL in real-time
 - Implemented time window transformations for proper timestamp handling
+- Added watermarks to handle late-arriving data and enable stateful processing with append mode
 
 ### 8. Set Up PostgreSQL for Real-time Data Storage
 - Set up a PostgreSQL database with Docker Compose

@@ -127,6 +127,16 @@ docker exec -it spark-master bash -c "spark-submit --packages org.apache.spark:s
 
 This will start processing the streaming data and writing metrics directly to PostgreSQL in real-time.
 
+### Note on Watermarks
+
+The Spark streaming job uses a watermark of 10 minutes on the timestamp column. This means:
+
+- The system will wait for late data up to 10 minutes after the event time
+- Data arriving more than 10 minutes late (based on the event timestamp) may be dropped
+- Aggregation results for a time window will be finalized after the watermark threshold has passed
+
+Watermarks are required when using append output mode with streaming aggregations that use window functions. They help manage state and handle late-arriving data in a streaming context.
+
 ## Step 9: Copy the PostgreSQL JDBC Driver
 
 Copy the PostgreSQL JDBC driver to the Spark master container:

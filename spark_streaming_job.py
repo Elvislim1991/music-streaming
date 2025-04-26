@@ -53,6 +53,10 @@ parsed_stream_df = stream_df \
     .select("data.*") \
     .withColumn("timestamp", to_timestamp("timestamp"))
 
+# Add watermark to handle late data - this is required for aggregations with append mode
+# The watermark specifies the threshold of how late the data is expected to be
+parsed_stream_df = parsed_stream_df.withWatermark("timestamp", "10 minutes")
+
 # Create a temporary view for SQL queries
 parsed_stream_df.createOrReplaceTempView("stream_events")
 
