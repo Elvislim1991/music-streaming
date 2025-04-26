@@ -321,7 +321,7 @@ process_streaming_data() {
 
     # Execute the Spark streaming job
     echo "Executing Spark streaming job..."
-    docker exec -it spark-master bash -c "spark-submit --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.1.2 spark_streaming_job.py" &
+    docker exec spark-master bash -c "spark-submit --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.1.2 spark_streaming_job.py" &
 
     # Save the PID to kill it later if needed
     SPARK_PID=$!
