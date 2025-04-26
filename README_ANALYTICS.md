@@ -150,7 +150,25 @@ Using keys provides several benefits:
 - Improves performance for consumers that only need specific keys
 - Makes it easier to find specific messages when troubleshooting
 
-## Step 8: Process Streaming Data with Spark
+## Step 8: Load Dimension Data into PostgreSQL
+
+Before processing streaming events, you need to load dimension data into PostgreSQL to satisfy foreign key constraints.
+
+Copy the dimension data loader script to the Spark master container:
+
+```bash
+docker cp dimension_data_loader.py spark-master:/opt/bitnami/spark/
+```
+
+Execute the dimension data loader script:
+
+```bash
+docker exec -it spark-master bash -c "spark-submit --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.1.2 dimension_data_loader.py"
+```
+
+This will read dimension data from Kafka topics and load it into PostgreSQL tables.
+
+## Step 9: Process Streaming Data with Spark
 
 Copy the Spark streaming job to the Spark master container:
 
@@ -221,7 +239,7 @@ The Spark streaming job includes robust error handling with a dead letter queue 
      - Fix the data issues (e.g., add missing dimension records)
      - Reprocess the corrected records
 
-## Step 9: Copy the PostgreSQL JDBC Driver
+## Step 10: Copy the PostgreSQL JDBC Driver
 
 Copy the PostgreSQL JDBC driver to the Spark master container:
 
@@ -235,7 +253,7 @@ docker cp postgresql-42.5.0.jar spark-master:/opt/bitnami/spark/jars/
 
 The Spark streaming job is configured to write data directly to PostgreSQL in real-time, so there's no need for a separate data loading step.
 
-## Step 10: Validate the Data Model
+## Step 11: Validate the Data Model
 
 Connect to Postgres and run the validation queries:
 
@@ -244,7 +262,7 @@ docker cp validation_queries.sql postgres:/tmp/
 docker exec -it postgres psql -U postgres -d music_streaming -f /tmp/validation_queries.sql
 ```
 
-## Step 11: Visualize Metrics in Superset
+## Step 12: Visualize Metrics in Superset
 
 1. Log in to Superset at http://localhost:8088
 2. Add a new database connection:
