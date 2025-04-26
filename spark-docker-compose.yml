@@ -19,7 +19,7 @@ services:
       - "8080:8080"    # Spark UI
 
   spark-worker:
-    image: bitnami/spark:3.5.0
+    image: bitnami/spark:3.5.5
     platform: linux/arm64
     container_name: spark-worker
     networks:
