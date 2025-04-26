@@ -49,6 +49,9 @@ else:
 
 print(f"Attempting to connect to Kafka at {bootstrap_servers}")
 
+# Extract host from bootstrap_servers
+kafka_host = bootstrap_servers.split(':')[0]
+
 # Function to check if the Kafka port is accessible
 def check_kafka_port(host, port=9092, timeout=5):
     try:
