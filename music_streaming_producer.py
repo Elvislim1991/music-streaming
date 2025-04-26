@@ -192,10 +192,8 @@ def generate_streaming_event(dimension_data):
     is_shared = random.random() < 0.1  # 10% chance of sharing
     is_added_to_playlist = random.random() < 0.15  # 15% chance of adding to playlist
 
-    # Generate timestamp within the last 24 hours
-    timestamp = (datetime.now() - timedelta(hours=random.randint(0, 23), 
-                                           minutes=random.randint(0, 59), 
-                                           seconds=random.randint(0, 59))).isoformat()
+    # Generate current timestamp for real-time visualization
+    timestamp = datetime.now().isoformat()
 
     event = {
         'event_id': str(uuid.uuid4()),

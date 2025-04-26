@@ -58,17 +58,18 @@ parsed_stream_df = stream_df \
 
 # Add watermark to handle late data - this is required for aggregations with append mode
 # The watermark specifies the threshold of how late the data is expected to be
-parsed_stream_df = parsed_stream_df.withWatermark("timestamp", "10 minutes")
+# Using a smaller watermark (2 minutes) for more real-time visualization
+parsed_stream_df = parsed_stream_df.withWatermark("timestamp", "2 minutes")
 
 # Create a temporary view for SQL queries
 parsed_stream_df.createOrReplaceTempView("stream_events")
 
 # Define various metrics to compute
 
-# 1. User engagement metrics - 5 minute windows
+# 1. User engagement metrics - 1 minute windows for real-time visualization
 user_engagement_df = spark.sql("""
     SELECT 
-        window(timestamp, '5 minutes') as time_window,
+        window(timestamp, '1 minute') as time_window,
         user_id,
         COUNT(*) as stream_count,
         SUM(stream_duration_seconds) as total_listen_time,
@@ -78,13 +79,13 @@ user_engagement_df = spark.sql("""
         SUM(CASE WHEN is_shared THEN 1 ELSE 0 END) / COUNT(*) as share_rate,
         SUM(CASE WHEN is_added_to_playlist THEN 1 ELSE 0 END) / COUNT(*) as playlist_add_rate
     FROM stream_events
-    GROUP BY window(timestamp, '5 minutes'), user_id
+    GROUP BY window(timestamp, '1 minute'), user_id
 """)
 
-# 2. Content performance metrics - 5 minute windows
+# 2. Content performance metrics - 1 minute windows for real-time visualization
 content_performance_df = spark.sql("""
     SELECT 
-        window(timestamp, '5 minutes') as time_window,
+        window(timestamp, '1 minute') as time_window,
         song_id,
         artist_id,
         COUNT(*) as stream_count,
@@ -92,31 +93,31 @@ content_performance_df = spark.sql("""
         SUM(CASE WHEN is_skipped THEN 1 ELSE 0 END) / COUNT(*) as skip_rate,
         SUM(CASE WHEN is_liked THEN 1 ELSE 0 END) / COUNT(*) as like_rate
     FROM stream_events
-    GROUP BY window(timestamp, '5 minutes'), song_id, artist_id
+    GROUP BY window(timestamp, '1 minute'), song_id, artist_id
 """)
 
-# 3. Device metrics - 5 minute windows
+# 3. Device metrics - 1 minute windows for real-time visualization
 device_metrics_df = spark.sql("""
     SELECT 
-        window(timestamp, '5 minutes') as time_window,
+        window(timestamp, '1 minute') as time_window,
         device_id,
         COUNT(*) as stream_count,
         AVG(stream_duration_seconds) as avg_listen_time,
         SUM(CASE WHEN is_complete_play THEN 1 ELSE 0 END) / COUNT(*) as completion_rate
     FROM stream_events
-    GROUP BY window(timestamp, '5 minutes'), device_id
+    GROUP BY window(timestamp, '1 minute'), device_id
 """)
 
-# 4. Location metrics - 5 minute windows
+# 4. Location metrics - 1 minute windows for real-time visualization
 location_metrics_df = spark.sql("""
     SELECT 
-        window(timestamp, '5 minutes') as time_window,
+        window(timestamp, '1 minute') as time_window,
         location_id,
         COUNT(*) as stream_count,
         approx_count_distinct(user_id) as unique_users,
         approx_count_distinct(song_id) as unique_songs
     FROM stream_events
-    GROUP BY window(timestamp, '5 minutes'), location_id
+    GROUP BY window(timestamp, '1 minute'), location_id
 """)
 
 # 5. Hourly metrics - 1 hour windows
@@ -135,10 +136,13 @@ hourly_metrics_df = spark.sql("""
     GROUP BY window(timestamp, '1 hour')
 """)
 
-# Function to handle time_window column for JDBC
+# Function to handle time_window column for JDBC and real-time visualization
 def transform_time_window(df):
+    # Extract both start and end times from the window for better real-time visualization
+    # This allows the dashboard to show the exact time range for each data point
     return df.withColumnRenamed("time_window", "window_struct") \
              .withColumn("time_window", col("window_struct.start")) \
+             .withColumn("window_end", col("window_struct.end")) \
              .drop("window_struct")
 
 # Function to handle batch processing with error handling and dead letter queue
