@@ -186,6 +186,7 @@ def handle_foreign_key_violation(df, epoch_id, table_name, properties, error_mes
         error_message: The error message from the exception
     """
     print(f"Handling foreign key constraint violation for batch {epoch_id}")
+    print(f"Error message: {error_message}")
 
     # Extract the constraint name and column from the error message
     # Example: "violates foreign key constraint "stream_events_user_id_fkey""
@@ -193,16 +194,40 @@ def handle_foreign_key_violation(df, epoch_id, table_name, properties, error_mes
     constraint_end = error_message.find('"', constraint_start)
     constraint_name = error_message[constraint_start:constraint_end] if constraint_start > 0 and constraint_end > 0 else ""
 
-    # Extract the column name from the constraint name (assuming naming convention: table_column_fkey)
-    column_name = constraint_name.split('_')[1] if len(constraint_name.split('_')) > 1 else ""
+    # Extract the column name directly from the error message
+    # Example: "Key (user_id)=(6) is not present in table "users""
+    key_start = error_message.find('(', error_message.find("Key")) + 1
+    key_end = error_message.find(')', key_start)
+    column_name = error_message[key_start:key_end] if key_start > 0 and key_end > 0 else ""
 
     # Extract the invalid value from the error message
-    # Example: "Key (user_id)=(6) is not present in table "users""
-    value_start = error_message.find('(', error_message.find("Key")) + 1
-    value_end = error_message.find(')', value_start)
-    invalid_value = error_message[value_start:value_end] if value_start > 0 and value_end > 0 else ""
+    # Example: "Key (user_id)=(69) is not present in table "users""
+    value_start = error_message.find('=', key_end) + 1 if key_end > 0 else 0
+    if value_start > 0:
+        # Check if the value is enclosed in parentheses
+        if error_message[value_start:].strip().startswith('('):
+            value_start = error_message.find('(', value_start) + 1
+            value_end = error_message.find(')', value_start)
+        else:
+            # If not in parentheses, find the end of the value (space, newline, etc.)
+            value_end = error_message.find(' ', value_start)
+            if value_end == -1:  # No space found, try to find end of line
+                value_end = error_message.find('\n', value_start)
+            if value_end == -1:  # No newline found, use the rest of the string
+                value_end = len(error_message)
+        invalid_value = error_message[value_start:value_end].strip()
+    else:
+        invalid_value = ""
 
     print(f"Identified constraint: {constraint_name}, column: {column_name}, invalid value: {invalid_value}")
+
+    # Debug information about the DataFrame schema
+    print(f"DataFrame columns: {df.columns}")
+
+    # Verify the column exists in the DataFrame
+    if column_name and column_name not in df.columns:
+        print(f"Warning: Column '{column_name}' not found in DataFrame. Available columns: {df.columns}")
+        column_name = ""  # Reset column_name to avoid filtering on a non-existent column
 
     if column_name and invalid_value:
         # Split the invalid records from valid ones

@@ -1,22 +1,44 @@
 import os
 import socket
 import time
+import argparse
 from kafka.admin import KafkaAdminClient, NewTopic
 from kafka.errors import TopicAlreadyExistsError, NoBrokersAvailable, KafkaError
 
-# Get Kafka host from environment variable or use the hostname if not set
-kafka_host = os.environ.get('KAFKA_HOST')
-if not kafka_host:
-    # Try to get the hostname or IP address that might work better with Docker
-    kafka_host = socket.gethostname()
-    print(f"KAFKA_HOST not set, using hostname: {kafka_host}")
+# Parse command line arguments
+parser = argparse.ArgumentParser(description='Create Kafka topics for music streaming analytics')
+parser.add_argument('--internal', action='store_true', help='Use internal Kafka bootstrap server (broker:29092)')
+parser.add_argument('--external', action='store_true', help='Use external Kafka bootstrap server (KAFKA_HOST:9092)')
+args = parser.parse_args()
 
-    # Fallback to localhost if needed
-    if kafka_host == 'localhost' or not kafka_host:
-        kafka_host = 'localhost'
-        print("Using localhost as fallback")
+# Determine which bootstrap server to use
+use_internal = args.internal or os.environ.get('USE_INTERNAL_KAFKA', 'false').lower() in ('true', '1', 'yes')
+use_external = args.external or os.environ.get('USE_EXTERNAL_KAFKA', 'false').lower() in ('true', '1', 'yes')
 
-bootstrap_servers = f'{kafka_host}:9092'
+# If both are specified, internal takes precedence
+if use_internal:
+    bootstrap_servers = 'broker:29092'
+    print("Using internal Kafka bootstrap server: broker:29092")
+elif use_external:
+    # Get Kafka host from environment variable or use the hostname if not set
+    kafka_host = os.environ.get('KAFKA_HOST')
+    if not kafka_host:
+        # Try to get the hostname or IP address that might work better with Docker
+        kafka_host = socket.gethostname()
+        print(f"KAFKA_HOST not set, using hostname: {kafka_host}")
+
+        # Fallback to localhost if needed
+        if kafka_host == 'localhost' or not kafka_host:
+            kafka_host = 'localhost'
+            print("Using localhost as fallback")
+
+    bootstrap_servers = f'{kafka_host}:9092'
+    print(f"Using external Kafka bootstrap server: {bootstrap_servers}")
+else:
+    # Default to internal for better compatibility with consumer commands
+    bootstrap_servers = 'broker:29092'
+    print("Using default internal Kafka bootstrap server: broker:29092")
+
 print(f"Attempting to connect to Kafka at {bootstrap_servers}")
 
 # Define topics and their configurations
@@ -97,7 +119,7 @@ def create_topics():
             client_id='music-streaming-admin',
             api_version=(2, 5, 0)
         )
-        
+
         # Get existing topics
         try:
             existing_topics = admin_client.list_topics()
@@ -105,7 +127,7 @@ def create_topics():
         except Exception as e:
             print(f"Warning: Could not list existing topics: {e}")
             existing_topics = []
-        
+
         # Create new topics
         new_topics = []
         for topic_config in topics_config:
@@ -120,22 +142,22 @@ def create_topics():
                 )
             else:
                 print(f"Topic '{topic_config['name']}' already exists")
-        
+
         if new_topics:
             print(f"Creating {len(new_topics)} topics...")
             admin_client.create_topics(new_topics=new_topics, validate_only=False)
             print("Topics created successfully")
         else:
             print("No new topics to create")
-        
+
         # Close the admin client
         admin_client.close()
         return True
-    
+
     except TopicAlreadyExistsError:
         print("Some topics already exist. Continuing...")
         return True
-    
+
     except NoBrokersAvailable as e:
         print(f"No Kafka brokers available: {e}")
         print("\nThis usually means the Kafka broker is not running or not accessible.")
@@ -143,12 +165,12 @@ def create_topics():
         print("docker-compose -f kafka-docker-compose.yml ps")
         print("docker-compose -f kafka-docker-compose.yml logs broker")
         return False
-    
+
     except KafkaError as e:
         print(f"Error connecting to Kafka: {e}")
         print("\nTry setting the KAFKA_HOST environment variable to the IP address of your Kafka broker")
         print("For example: export KAFKA_HOST=192.168.1.100")
-        
+
         print("\nAdditional troubleshooting:")
         print("1. Check if Docker is running the Kafka container:")
         print("   docker ps | grep broker")
@@ -162,18 +184,18 @@ def main():
     """Main function to create topics with retry logic"""
     max_retries = 5
     retry_interval = 5  # seconds
-    
+
     for attempt in range(1, max_retries + 1):
         print(f"Attempt {attempt}/{max_retries} to create Kafka topics")
-        
+
         if create_topics():
             print("All topics created or already exist")
             return 0
-        
+
         if attempt < max_retries:
             print(f"Retrying in {retry_interval} seconds...")
             time.sleep(retry_interval)
-    
+
     print(f"Failed to create topics after {max_retries} attempts")
     return 1
 

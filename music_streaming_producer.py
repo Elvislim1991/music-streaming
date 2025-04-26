@@ -4,27 +4,49 @@ import time
 import uuid
 import json
 import random
+import argparse
 from datetime import datetime, timedelta
 from faker import Faker
 from kafka import KafkaProducer
 from kafka.errors import KafkaError, KafkaTimeoutError, NoBrokersAvailable
 
+# Parse command line arguments
+parser = argparse.ArgumentParser(description='Generate and send music streaming data to Kafka')
+parser.add_argument('--internal', action='store_true', help='Use internal Kafka bootstrap server (broker:29092)')
+parser.add_argument('--external', action='store_true', help='Use external Kafka bootstrap server (KAFKA_HOST:9092)')
+args = parser.parse_args()
+
 # Initialize Faker
 fake = Faker()
 
-# Get Kafka host from environment variable or use the hostname if not set
-kafka_host = os.environ.get('KAFKA_HOST')
-if not kafka_host:
-    # Try to get the hostname or IP address that might work better with Docker
-    kafka_host = socket.gethostname()
-    print(f"KAFKA_HOST not set, using hostname: {kafka_host}")
+# Determine which bootstrap server to use
+use_internal = args.internal or os.environ.get('USE_INTERNAL_KAFKA', 'false').lower() in ('true', '1', 'yes')
+use_external = args.external or os.environ.get('USE_EXTERNAL_KAFKA', 'false').lower() in ('true', '1', 'yes')
 
-    # Fallback to localhost if needed
-    if kafka_host == 'localhost' or not kafka_host:
-        kafka_host = 'localhost'
-        print("Using localhost as fallback")
+# If both are specified, internal takes precedence
+if use_internal:
+    bootstrap_servers = 'broker:29092'
+    print("Using internal Kafka bootstrap server: broker:29092")
+elif use_external:
+    # Get Kafka host from environment variable or use the hostname if not set
+    kafka_host = os.environ.get('KAFKA_HOST')
+    if not kafka_host:
+        # Try to get the hostname or IP address that might work better with Docker
+        kafka_host = socket.gethostname()
+        print(f"KAFKA_HOST not set, using hostname: {kafka_host}")
 
-bootstrap_servers = f'{kafka_host}:9092'
+        # Fallback to localhost if needed
+        if kafka_host == 'localhost' or not kafka_host:
+            kafka_host = 'localhost'
+            print("Using localhost as fallback")
+
+    bootstrap_servers = f'{kafka_host}:9092'
+    print(f"Using external Kafka bootstrap server: {bootstrap_servers}")
+else:
+    # Default to internal for better compatibility with consumer commands
+    bootstrap_servers = 'broker:29092'
+    print("Using default internal Kafka bootstrap server: broker:29092")
+
 print(f"Attempting to connect to Kafka at {bootstrap_servers}")
 
 # Function to check if the Kafka port is accessible
@@ -72,7 +94,7 @@ def generate_dimension_data():
             'registration_date': fake.date_between(start_date='-3y', end_date='today').isoformat(),
             'country': fake.country()
         })
-    
+
     # Generate artists
     artists = []
     for i in range(1, 51):  # 50 artists
@@ -83,7 +105,7 @@ def generate_dimension_data():
             'genre': random.choice(['Pop', 'Rock', 'Hip Hop', 'R&B', 'Country', 'Electronic', 'Jazz', 'Classical']),
             'is_band': random.choice([True, False])
         })
-    
+
     # Generate albums
     albums = []
     for i in range(1, 101):  # 100 albums
@@ -96,7 +118,7 @@ def generate_dimension_data():
             'total_tracks': random.randint(5, 15),
             'album_type': random.choice(['LP', 'EP', 'Single', 'Compilation'])
         })
-    
+
     # Generate songs
     songs = []
     for i in range(1, 501):  # 500 songs
@@ -112,7 +134,7 @@ def generate_dimension_data():
             'language': random.choice(['English', 'Spanish', 'French', 'German', 'Japanese', 'Korean', 'Chinese']),
             'explicit': random.choice([True, False])
         })
-    
+
     # Generate devices
     devices = []
     for i in range(1, 11):  # 10 device types
@@ -123,7 +145,7 @@ def generate_dimension_data():
             'browser': random.choice(['Chrome', 'Safari', 'Firefox', 'Edge', 'N/A']),
             'app_version': f"{random.randint(1, 5)}.{random.randint(0, 9)}.{random.randint(0, 9)}"
         })
-    
+
     # Generate locations
     locations = []
     for i in range(1, 51):  # 50 locations
@@ -134,7 +156,7 @@ def generate_dimension_data():
             'city': fake.city(),
             'timezone': fake.timezone()
         })
-    
+
     return {
         'users': users,
         'artists': artists,
@@ -152,10 +174,10 @@ def generate_streaming_event(dimension_data):
     artist_id = next(album for album in dimension_data['albums'] if album['album_id'] == album_id)['artist_id']
     device = random.choice(dimension_data['devices'])
     location = random.choice(dimension_data['locations'])
-    
+
     # Determine if song was skipped
     is_skipped = random.random() < 0.3  # 30% chance of skipping
-    
+
     # Calculate stream duration based on skip status
     song_duration = song['duration_seconds']
     if is_skipped:
@@ -164,17 +186,17 @@ def generate_streaming_event(dimension_data):
     else:
         stream_duration = song_duration
         is_complete_play = True
-    
+
     # Generate other interaction flags
     is_liked = random.random() < 0.2  # 20% chance of liking
     is_shared = random.random() < 0.1  # 10% chance of sharing
     is_added_to_playlist = random.random() < 0.15  # 15% chance of adding to playlist
-    
+
     # Generate timestamp within the last 24 hours
     timestamp = (datetime.now() - timedelta(hours=random.randint(0, 23), 
                                            minutes=random.randint(0, 59), 
                                            seconds=random.randint(0, 59))).isoformat()
-    
+
     event = {
         'event_id': str(uuid.uuid4()),
         'user_id': user['user_id'],
@@ -191,7 +213,7 @@ def generate_streaming_event(dimension_data):
         'is_shared': is_shared,
         'is_added_to_playlist': is_added_to_playlist
     }
-    
+
     return event
 
 try:
@@ -205,43 +227,51 @@ try:
         retry_backoff_ms=500,
         max_block_ms=10000
     )
-    
+
     # Generate dimension data
     print("Generating dimension data...")
     dimension_data = generate_dimension_data()
-    
+
     # Create topics for dimension data
     dimension_topics = ['users', 'artists', 'albums', 'songs', 'devices', 'locations']
     stream_topic = 'stream-events'
-    
+
     # Send dimension data to Kafka
     print("Sending dimension data to Kafka...")
     for topic_name in dimension_topics:
         for item in dimension_data[topic_name]:
-            producer.send(topic_name, item)
-    
+            # Use the ID field as the key for the message
+            key_field = f"{topic_name[:-1]}_id" if topic_name.endswith('s') else f"{topic_name}_id"
+            if key_field in item:
+                key = str(item[key_field]).encode('utf-8')
+                producer.send(topic_name, key=key, value=item)
+            else:
+                producer.send(topic_name, value=item)
+
     # Flush to ensure dimension data is sent
     producer.flush()
     print("Dimension data sent successfully")
-    
+
     # Generate and send streaming events continuously
     print(f"Generating and sending streaming events to topic '{stream_topic}'...")
     print("Press Ctrl+C to stop")
-    
+
     event_count = 0
     try:
         while True:
             event = generate_streaming_event(dimension_data)
-            producer.send(stream_topic, event)
+            # Use event_id as the key for the stream events
+            key = str(event['event_id']).encode('utf-8')
+            producer.send(stream_topic, key=key, value=event)
             event_count += 1
-            
+
             if event_count % 10 == 0:
                 producer.flush()
                 print(f"Sent {event_count} events")
-            
+
             # Sleep for a random time between 0.1 and 1 second
             time.sleep(random.uniform(0.1, 1))
-    
+
     except KeyboardInterrupt:
         print("\nStopping event generation")
         producer.flush()
@@ -253,7 +283,7 @@ except KafkaTimeoutError as e:
     print("1. The Kafka broker is not running")
     print("2. The Kafka broker is not accessible at the specified IP address")
     print("3. The Kafka broker is running but not properly configured")
-    
+
     print("\nTroubleshooting steps:")
     print("1. Make sure your Docker containers are running:")
     print("   docker-compose -f kafka-docker-compose.yml ps")
@@ -277,7 +307,7 @@ except KafkaError as e:
     print(f"Error connecting to Kafka: {e}")
     print("\nTry setting the KAFKA_HOST environment variable to the IP address of your Kafka broker")
     print("For example: export KAFKA_HOST=192.168.1.100")
-    
+
     print("\nAdditional troubleshooting:")
     print("1. Check if Docker is running the Kafka container:")
     print("   docker ps | grep broker")

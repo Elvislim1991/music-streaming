@@ -45,8 +45,21 @@ docker ps | grep broker
 Run the script to create Kafka topics with appropriate partitioning:
 
 ```bash
+# Use the default internal bootstrap server (recommended)
 python create_kafka_topics.py
+
+# Or explicitly specify the internal bootstrap server
+python create_kafka_topics.py --internal
+
+# Or use the external bootstrap server (if needed)
+python create_kafka_topics.py --external
 ```
+
+The topic creation script supports the following command-line arguments:
+- `--internal`: Use the internal Kafka bootstrap server (broker:29092)
+- `--external`: Use the external Kafka bootstrap server (KAFKA_HOST:9092)
+
+By default, the script uses the internal bootstrap server for better compatibility with Kafka consumer commands.
 
 ## Step 3: Start Spark Cluster
 
@@ -106,10 +119,36 @@ For remote access: http://<raspberry-pi-ip-address>:8088 (e.g., http://192.168.1
 Run the Faker-based Kafka producer to generate streaming events:
 
 ```bash
+# Use the default internal bootstrap server (recommended)
 python music_streaming_producer.py
+
+# Or explicitly specify the internal bootstrap server
+python music_streaming_producer.py --internal
+
+# Or use the external bootstrap server (if needed)
+python music_streaming_producer.py --external
 ```
 
-This will continuously generate music streaming events and send them to Kafka.
+The producer script supports the following command-line arguments:
+- `--internal`: Use the internal Kafka bootstrap server (broker:29092)
+- `--external`: Use the external Kafka bootstrap server (KAFKA_HOST:9092)
+
+By default, the script uses the internal bootstrap server for better compatibility with Kafka consumer commands.
+
+This will continuously generate music streaming events and send them to Kafka. The script will also send dimension data (users, artists, albums, songs, devices, locations) to their respective topics with proper keys for compaction.
+
+### Note on Kafka Message Keys
+
+The producer script uses appropriate keys when sending messages to Kafka:
+
+1. **Dimension Data**: Each dimension entity uses its ID field as the key (e.g., `user_id` for users, `song_id` for songs)
+2. **Streaming Events**: Each event uses its `event_id` (UUID) as the key
+
+Using keys provides several benefits:
+- Ensures related messages go to the same partition (important for ordering)
+- Enables proper compaction for topics with `cleanup.policy: compact`
+- Improves performance for consumers that only need specific keys
+- Makes it easier to find specific messages when troubleshooting
 
 ## Step 8: Process Streaming Data with Spark
 
@@ -159,9 +198,12 @@ The Spark streaming job includes robust error handling with a dead letter queue 
 2. **How Error Handling Works:**
    - When a database error occurs (e.g., foreign key constraint violation), the system:
      - Logs detailed error information
-     - For foreign key violations, identifies the specific records causing the issue
-     - Sends problematic records to the dead letter queue
-     - Attempts to process the remaining valid records
+     - For foreign key violations:
+       - Intelligently parses the error message to extract the column name and invalid value
+       - Verifies the column exists in the DataFrame before attempting to filter
+       - Identifies and isolates the specific records causing the issue
+       - Sends only the problematic records to the dead letter queue
+       - Attempts to process the remaining valid records separately
 
 3. **Monitoring the Dead Letter Queue:**
    ```bash
@@ -258,6 +300,23 @@ If Spark jobs fail, check:
 - Spark container logs: `docker logs spark-master`
 - Make sure the Kafka topics exist and have data
 - Verify that the Spark job has the correct Kafka bootstrap servers
+
+### Foreign Key Constraint Violations
+
+If you see foreign key constraint violations in the logs:
+- Check the dead letter queue to see which records failed: 
+  ```bash
+  docker exec -it broker kafka-console-consumer \
+    --bootstrap-server broker:29092 \
+    --topic dead-letter-queue \
+    --from-beginning
+  ```
+- Verify that the referenced dimension data exists in the database:
+  ```bash
+  docker exec -it postgres psql -U postgres -d music_streaming -c "SELECT * FROM users WHERE user_id = X"
+  ```
+  (Replace X with the user_id from the error message)
+- You may need to add missing dimension records or modify the producer to generate only valid foreign keys
 
 ### Postgres Connection Issues
 
