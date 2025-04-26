@@ -52,7 +52,7 @@ check_prerequisites() {
     fi
     
     # Check if Docker Compose is installed
-    if ! command_exists docker-compose; then
+    if ! command_exists docker compose; then
         echo "Error: Docker Compose is not installed. Please install Docker Compose and try again."
         exit 1
     fi
