@@ -18,12 +18,12 @@ def is_hostname_resolvable(hostname):
 
 # Function to extract hostname from server string
 def extract_hostname(server):
-    """Extract hostname from server string (e.g., 'broker:29092' -> 'broker')"""
+    """Extract hostname from server string (e.g., 'broker:9092' -> 'broker')"""
     return server.split(':')[0] if ':' in server else server
 
 # Parse command line arguments
 parser = argparse.ArgumentParser(description='Create Kafka topics for music streaming analytics')
-parser.add_argument('--internal', action='store_true', help='Use internal Kafka bootstrap server (broker:29092)')
+parser.add_argument('--internal', action='store_true', help='Use internal Kafka bootstrap server (broker:9092)')
 parser.add_argument('--external', action='store_true', help='Use external Kafka bootstrap server (KAFKA_HOST:9092)')
 args = parser.parse_args()
 
@@ -35,14 +35,14 @@ use_external = args.external or os.environ.get('USE_EXTERNAL_KAFKA', 'false').lo
 if use_internal:
     # Check if broker is resolvable
     if is_hostname_resolvable('broker'):
-        bootstrap_servers = 'broker:29092'
-        print("Using internal Kafka bootstrap server: broker:29092")
+        bootstrap_servers = 'broker:9092'
+        print("Using internal Kafka bootstrap server: broker:9092")
     else:
-        bootstrap_servers = 'localhost:29092'
-        print("Hostname 'broker' is not resolvable, using localhost:29092 instead")
+        bootstrap_servers = 'localhost:9092'
+        print("Hostname 'broker' is not resolvable, using localhost:9092 instead")
 
     # Add fallback servers
-    fallback_servers = ['localhost:29092', '127.0.0.1:29092']
+    fallback_servers = ['localhost:9092', '127.0.0.1:9092']
 elif use_external:
     # Get Kafka host from environment variable or use the hostname if not set
     kafka_host = os.environ.get('KAFKA_HOST')
@@ -64,20 +64,20 @@ elif use_external:
 
     # Add broker fallbacks only if broker is resolvable
     if is_hostname_resolvable('broker'):
-        fallback_servers.append('broker:29092')
-    fallback_servers.append('localhost:29092')
+        fallback_servers.append('broker:9092')
+    fallback_servers.append('localhost:9092')
 else:
     # Default to internal for better compatibility with consumer commands
     # Check if broker is resolvable
     if is_hostname_resolvable('broker'):
-        bootstrap_servers = 'broker:29092'
-        print("Using default internal Kafka bootstrap server: broker:29092")
+        bootstrap_servers = 'broker:9092'
+        print("Using default internal Kafka bootstrap server: broker:9092")
     else:
-        bootstrap_servers = 'localhost:29092'
-        print("Hostname 'broker' is not resolvable, using localhost:29092 instead")
+        bootstrap_servers = 'localhost:9092'
+        print("Hostname 'broker' is not resolvable, using localhost:9092 instead")
 
     # Add fallback servers
-    fallback_servers = ['localhost:29092', '127.0.0.1:29092']
+    fallback_servers = ['localhost:9092', '127.0.0.1:9092']
 
 # Print all servers we'll try
 print(f"Will try the following servers in order: {bootstrap_servers}, then {', '.join(fallback_servers)}")
@@ -94,8 +94,8 @@ if not is_hostname_resolvable(bootstrap_hostname):
     # If the hostname is 'broker', suggest using localhost instead
     if bootstrap_hostname == 'broker':
         print("\nTrying to use localhost instead...")
-        if 'broker:29092' in bootstrap_servers:
-            bootstrap_servers = bootstrap_servers.replace('broker:29092', 'localhost:29092')
+        if 'broker:9092' in bootstrap_servers:
+            bootstrap_servers = bootstrap_servers.replace('broker:9092', 'localhost:9092')
             print(f"Using {bootstrap_servers} instead")
         elif 'broker:9092' in bootstrap_servers:
             bootstrap_servers = bootstrap_servers.replace('broker:9092', 'localhost:9092')
