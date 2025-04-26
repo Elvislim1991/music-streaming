@@ -140,10 +140,15 @@ hourly_metrics_df = spark.sql("""
 def transform_time_window(df):
     # Extract both start and end times from the window for better real-time visualization
     # This allows the dashboard to show the exact time range for each data point
-    return df.withColumnRenamed("time_window", "window_struct") \
-             .withColumn("time_window", col("window_struct.start")) \
-             .withColumn("window_end", col("window_struct.end")) \
-             .drop("window_struct")
+    # First, extract the window start and end
+    df_with_window = df.withColumnRenamed("time_window", "window_struct") \
+                       .withColumn("time_window", col("window_struct.start")) \
+                       .withColumn("window_end", col("window_struct.end")) \
+                       .drop("window_struct")
+
+    # Drop the window_end column before writing to PostgreSQL
+    # This is necessary because the PostgreSQL tables don't have a window_end column
+    return df_with_window.drop("window_end")
 
 # Function to handle batch processing with error handling and dead letter queue
 def process_batch_with_dlq(df, epoch_id, table_name, properties):
