@@ -241,7 +241,7 @@ hourly_metrics_query = hourly_metrics_df \
 # Write raw events to Postgres in real-time
 raw_events_query = parsed_stream_df \
     .writeStream \
-    .foreachBatch(lambda df, epoch_id: df.write \
+    .foreachBatch(lambda df, epoch_id: df.withColumn("event_id", expr("CAST(event_id AS UUID)")).write \
         .jdbc(
             url=postgres_properties["url"],
             table="stream_events",
