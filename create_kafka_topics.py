@@ -130,8 +130,8 @@ def try_create_topics(server):
             api_version=(2, 5, 0),
             request_timeout_ms=10000,  # 10 seconds timeout for requests
             connections_max_idle_ms=30000,  # 30 seconds max idle time
-            retry_backoff_ms=500,  # 0.5 seconds backoff between retries
-            socket_timeout_ms=10000  # 10 seconds socket timeout
+            retry_backoff_ms=500  # 0.5 seconds backoff between retries
+            # socket_timeout_ms parameter removed as it's not supported in this version of kafka-python
         )
 
         # Get existing topics

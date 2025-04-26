@@ -128,6 +128,12 @@ If the script gets stuck when creating Kafka topics (especially on Raspberry Pi)
 
 The setup script now includes improved error handling and will automatically try alternative connection methods if the default one fails.
 
+6. **Kafka Configuration Errors**: If you see errors like "KafkaConfigurationError: Unrecognized configs", this usually means there's an incompatibility between the Kafka client library and the version of kafka-python installed:
+   ```
+   Error connecting to Kafka at broker:29092: KafkaConfigurationError: Unrecognized configs: {'socket_timeout_ms'}
+   ```
+   This has been fixed in the latest version of the script, but if you encounter similar errors with other parameters, you may need to update your kafka-python library or modify the script to remove the unsupported parameters.
+
 ## Shutting Down
 
 To shut down all services and clean up volumes:
