@@ -13,8 +13,6 @@ services:
     container_name: broker
     networks:
       - streaming-network
-    extra_hosts:
-      - "broker:127.0.0.1"
     ports:
       - "9092:9092"
       - "9101:9101"
