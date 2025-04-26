@@ -13,4 +13,4 @@ superset fab create-admin --username admin --firstname Admin --lastname User --e
 superset init
 
 # Start Superset
-superset run -p 8088 --with-threads --reload --debugger
+superset run -h 0.0.0.0 -p 8088 --with-threads --reload --debugger

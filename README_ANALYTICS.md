@@ -94,9 +94,12 @@ Verify that Superset is running:
 docker ps | grep superset
 ```
 
-Access Superset at http://localhost:8088 with the following credentials:
+Access Superset with the following credentials:
 - Username: admin
 - Password: admin
+
+For local access: http://localhost:8088
+For remote access: http://<raspberry-pi-ip-address>:8088 (e.g., http://192.168.1.88:8088)
 
 ## Step 7: Generate Streaming Data
 
@@ -217,6 +220,40 @@ If Superset doesn't work correctly:
 - Check Superset logs: `docker logs superset`
 - Verify the database connection settings
 - Make sure the Postgres database has data
+
+If you cannot connect to Superset from another machine (e.g., "Connection refused" when trying to telnet to port 8088):
+1. **Verify Superset Container is Running**:
+   ```bash
+   docker ps | grep superset
+   ```
+   Make sure it's in the "Up" state.
+
+2. **Check Superset Logs for Binding Issues**:
+   ```bash
+   docker logs superset
+   ```
+   Look for messages about which address it's binding to.
+
+3. **Ensure No Firewall is Blocking the Connection**:
+   ```bash
+   sudo ufw status
+   ```
+   If active, make sure port 8088 is allowed:
+   ```bash
+   sudo ufw allow 8088/tcp
+   ```
+
+4. **Test Network Connectivity**:
+   ```bash
+   # From another machine
+   telnet <raspberry-pi-ip> 8088
+   ping <raspberry-pi-ip>
+   ```
+
+5. **Restart the Superset Container**:
+   ```bash
+   docker-compose -f superset-docker-compose.yml restart superset
+   ```
 
 ## Shutting Down
 
