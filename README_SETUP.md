@@ -1,0 +1,101 @@
+# Music Streaming Analytics Pipeline Setup Script
+
+This README provides instructions for using the `setup.sh` script to automate the setup of the music streaming analytics pipeline.
+
+## Overview
+
+The `setup.sh` script automates all the steps described in the `README_ANALYTICS.md` file, including:
+
+1. Starting Kafka, Spark, and Postgres clusters
+2. Creating Kafka topics
+3. Initializing the Postgres schema
+4. Starting Apache Superset
+5. Generating streaming data
+6. Processing streaming data with Spark
+
+## Prerequisites
+
+Before using the script, make sure you have:
+
+- Docker and Docker Compose installed
+- Python 3.8+ with pip
+- Internet connection (for downloading dependencies)
+
+## Getting Started
+
+1. Make the script executable:
+   ```bash
+   chmod +x setup.sh
+   ```
+
+2. Run the script with no options to start all components:
+   ```bash
+   ./setup.sh
+   ```
+
+## Command-Line Options
+
+The script supports the following command-line options:
+
+- `-h, --help`: Display help message
+- `-k, --kafka-only`: Start only Kafka
+- `-s, --spark-only`: Start only Spark
+- `-p, --postgres-only`: Start only Postgres
+- `-u, --superset-only`: Start only Superset
+- `-d, --data-only`: Generate and process data only
+- `-a, --all`: Start all components (default)
+- `-c, --clean`: Shut down all services and remove volumes
+- `--internal`: Use internal Kafka bootstrap server
+- `--external`: Use external Kafka bootstrap server
+
+## Examples
+
+1. Start only Kafka:
+   ```bash
+   ./setup.sh --kafka-only
+   ```
+
+2. Start Kafka and Spark:
+   ```bash
+   ./setup.sh --kafka-only --spark-only
+   ```
+
+3. Generate and process data (assuming services are already running):
+   ```bash
+   ./setup.sh --data-only
+   ```
+
+4. Shut down all services and clean up:
+   ```bash
+   ./setup.sh --clean
+   ```
+
+5. Use external Kafka bootstrap server:
+   ```bash
+   ./setup.sh --external
+   ```
+
+## Troubleshooting
+
+If you encounter issues:
+
+1. Check the logs of the specific service:
+   ```bash
+   docker-compose -f <service>-docker-compose.yml logs
+   ```
+
+2. Make sure all prerequisites are installed.
+
+3. Verify that the required ports are available on your system.
+
+4. Check that the KAFKA_HOST environment variable is set correctly.
+
+## Shutting Down
+
+To shut down all services and clean up volumes:
+
+```bash
+./setup.sh --clean
+```
+
+This will stop all Docker containers and remove all data volumes.
