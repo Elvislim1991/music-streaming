@@ -52,8 +52,7 @@ services:
     networks:
       - streaming-network
     depends_on:
-      broker:
-        condition: service_healthy
+      - broker
     ports:
       - "8081:8081"
     environment:
