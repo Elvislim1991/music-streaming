@@ -147,6 +147,38 @@ The approximate count distinct function:
 - Uses significantly less memory than exact counts
 - Is the recommended approach for distinct counting in streaming applications
 
+### Error Handling and Dead Letter Queue
+
+The Spark streaming job includes robust error handling with a dead letter queue mechanism:
+
+1. **What is a Dead Letter Queue?**
+   - A dead letter queue is a destination for messages that cannot be processed successfully
+   - In this pipeline, it's implemented as a Kafka topic named `dead-letter-queue`
+   - Records that cause errors (e.g., foreign key constraint violations) are sent to this queue
+
+2. **How Error Handling Works:**
+   - When a database error occurs (e.g., foreign key constraint violation), the system:
+     - Logs detailed error information
+     - For foreign key violations, identifies the specific records causing the issue
+     - Sends problematic records to the dead letter queue
+     - Attempts to process the remaining valid records
+
+3. **Monitoring the Dead Letter Queue:**
+   ```bash
+   # View messages in the dead letter queue
+   docker exec -it broker kafka-console-consumer \
+     --bootstrap-server broker:29092 \
+     --topic dead-letter-queue \
+     --from-beginning
+   ```
+
+4. **Processing Failed Records:**
+   - Records in the dead letter queue include the original data plus error information
+   - You can implement a separate process to:
+     - Analyze the errors
+     - Fix the data issues (e.g., add missing dimension records)
+     - Reprocess the corrected records
+
 ## Step 9: Copy the PostgreSQL JDBC Driver
 
 Copy the PostgreSQL JDBC driver to the Spark master container:

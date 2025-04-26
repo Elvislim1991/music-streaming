@@ -1,6 +1,9 @@
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import from_json, col, to_timestamp, window, count, avg, sum, expr, when
+from pyspark.sql.functions import from_json, col, to_timestamp, window, count, avg, sum, expr, when, lit, struct
 from pyspark.sql.types import StructType, StructField, StringType, IntegerType, BooleanType, TimestampType
+import json
+import traceback
+import time
 
 # Define schema for stream events
 stream_events_schema = StructType([
@@ -138,122 +141,237 @@ def transform_time_window(df):
              .withColumn("time_window", col("window_struct.start")) \
              .drop("window_struct")
 
-# Write user engagement metrics to Postgres in real-time
+# Function to handle batch processing with error handling and dead letter queue
+def process_batch_with_dlq(df, epoch_id, table_name, properties):
+    """
+    Process a batch of data with error handling and dead letter queue.
+
+    Args:
+        df: DataFrame to process
+        epoch_id: Batch ID
+        table_name: Target table name in PostgreSQL
+        properties: JDBC connection properties
+    """
+    try:
+        # Try to write the batch to PostgreSQL
+        df.write.jdbc(
+            url=postgres_properties["url"],
+            table=table_name,
+            mode="append",
+            properties=properties
+        )
+        print(f"Successfully wrote batch {epoch_id} to {table_name}")
+    except Exception as e:
+        error_message = str(e)
+        stack_trace = traceback.format_exc()
+        print(f"Error writing batch {epoch_id} to {table_name}: {error_message}")
+        print(f"Stack trace: {stack_trace}")
+
+        # Check if it's a foreign key constraint violation
+        if "violates foreign key constraint" in error_message:
+            handle_foreign_key_violation(df, epoch_id, table_name, properties, error_message)
+        else:
+            # For other errors, send all records to the dead letter queue
+            send_to_dead_letter_queue(df, epoch_id, table_name, error_message)
+
+def handle_foreign_key_violation(df, epoch_id, table_name, properties, error_message):
+    """
+    Handle foreign key constraint violations by filtering out invalid records.
+
+    Args:
+        df: DataFrame to process
+        epoch_id: Batch ID
+        table_name: Target table name in PostgreSQL
+        properties: JDBC connection properties
+        error_message: The error message from the exception
+    """
+    print(f"Handling foreign key constraint violation for batch {epoch_id}")
+
+    # Extract the constraint name and column from the error message
+    # Example: "violates foreign key constraint "stream_events_user_id_fkey""
+    constraint_start = error_message.find('"', error_message.find("constraint")) + 1
+    constraint_end = error_message.find('"', constraint_start)
+    constraint_name = error_message[constraint_start:constraint_end] if constraint_start > 0 and constraint_end > 0 else ""
+
+    # Extract the column name from the constraint name (assuming naming convention: table_column_fkey)
+    column_name = constraint_name.split('_')[1] if len(constraint_name.split('_')) > 1 else ""
+
+    # Extract the invalid value from the error message
+    # Example: "Key (user_id)=(6) is not present in table "users""
+    value_start = error_message.find('(', error_message.find("Key")) + 1
+    value_end = error_message.find(')', value_start)
+    invalid_value = error_message[value_start:value_end] if value_start > 0 and value_end > 0 else ""
+
+    print(f"Identified constraint: {constraint_name}, column: {column_name}, invalid value: {invalid_value}")
+
+    if column_name and invalid_value:
+        # Split the invalid records from valid ones
+        invalid_records = df.filter(col(column_name) == invalid_value)
+        valid_records = df.filter(col(column_name) != invalid_value)
+
+        # Send invalid records to the dead letter queue
+        invalid_count = invalid_records.count()
+        if invalid_count > 0:
+            print(f"Found {invalid_count} records with invalid {column_name}={invalid_value}")
+            send_to_dead_letter_queue(invalid_records, epoch_id, table_name, 
+                                     f"Foreign key violation: {column_name}={invalid_value}")
+
+        # Try to write the valid records to PostgreSQL
+        valid_count = valid_records.count()
+        if valid_count > 0:
+            print(f"Attempting to write {valid_count} valid records to {table_name}")
+            try:
+                valid_records.write.jdbc(
+                    url=postgres_properties["url"],
+                    table=table_name,
+                    mode="append",
+                    properties=properties
+                )
+                print(f"Successfully wrote {valid_count} valid records to {table_name}")
+            except Exception as e:
+                print(f"Error writing valid records: {str(e)}")
+                # If there's still an error, send all valid records to the dead letter queue
+                send_to_dead_letter_queue(valid_records, epoch_id, table_name, f"Secondary error: {str(e)}")
+    else:
+        # If we couldn't parse the error message, send all records to the dead letter queue
+        print("Could not parse error message to identify invalid records")
+        send_to_dead_letter_queue(df, epoch_id, table_name, error_message)
+
+def send_to_dead_letter_queue(df, epoch_id, table_name, error_message):
+    """
+    Send records to the dead letter queue.
+
+    Args:
+        df: DataFrame with records to send
+        epoch_id: Batch ID
+        table_name: Target table name
+        error_message: Error message to include
+    """
+    # Create a DataFrame with the error information
+    error_info = {
+        "table": table_name,
+        "batch_id": epoch_id,
+        "error_message": error_message,
+        "timestamp": str(time.time())
+    }
+
+    # Add error information to each row
+    df_with_error = df.withColumn("error_info", lit(json.dumps(error_info)))
+
+    # Write the failed records to a dead letter queue topic in Kafka
+    df_with_error.selectExpr("to_json(struct(*)) AS value") \
+        .write \
+        .format("kafka") \
+        .option("kafka.bootstrap.servers", "broker:29092") \
+        .option("topic", "dead-letter-queue") \
+        .save()
+
+    print(f"Wrote {df.count()} records to dead-letter-queue topic")
+
+# Write user engagement metrics to Postgres in real-time with error handling
 user_engagement_query = user_engagement_df \
     .transform(transform_time_window) \
     .writeStream \
-    .foreachBatch(lambda df, epoch_id: df.write \
-        .jdbc(
-            url=postgres_properties["url"],
-            table="user_engagement_metrics",
-            mode="append",
-            properties={
-                "user": postgres_properties["user"],
-                "password": postgres_properties["password"],
-                "driver": postgres_properties["driver"]
-            }
-        )
-    ) \
+    .foreachBatch(lambda df, epoch_id: process_batch_with_dlq(
+        df=df,
+        epoch_id=epoch_id,
+        table_name="user_engagement_metrics",
+        properties={
+            "user": postgres_properties["user"],
+            "password": postgres_properties["password"],
+            "driver": postgres_properties["driver"]
+        }
+    )) \
     .outputMode("append") \
     .option("checkpointLocation", "/tmp/checkpoints/user_engagement") \
     .start()
 
-# Write content performance metrics to Postgres in real-time
+# Write content performance metrics to Postgres in real-time with error handling
 content_performance_query = content_performance_df \
     .transform(transform_time_window) \
     .writeStream \
-    .foreachBatch(lambda df, epoch_id: df.write \
-        .jdbc(
-            url=postgres_properties["url"],
-            table="content_performance_metrics",
-            mode="append",
-            properties={
-                "user": postgres_properties["user"],
-                "password": postgres_properties["password"],
-                "driver": postgres_properties["driver"]
-            }
-        )
-    ) \
+    .foreachBatch(lambda df, epoch_id: process_batch_with_dlq(
+        df=df,
+        epoch_id=epoch_id,
+        table_name="content_performance_metrics",
+        properties={
+            "user": postgres_properties["user"],
+            "password": postgres_properties["password"],
+            "driver": postgres_properties["driver"]
+        }
+    )) \
     .outputMode("append") \
     .option("checkpointLocation", "/tmp/checkpoints/content_performance") \
     .start()
 
-# Write device metrics to Postgres in real-time
+# Write device metrics to Postgres in real-time with error handling
 device_metrics_query = device_metrics_df \
     .transform(transform_time_window) \
     .writeStream \
-    .foreachBatch(lambda df, epoch_id: df.write \
-        .jdbc(
-            url=postgres_properties["url"],
-            table="device_metrics",
-            mode="append",
-            properties={
-                "user": postgres_properties["user"],
-                "password": postgres_properties["password"],
-                "driver": postgres_properties["driver"]
-            }
-        )
-    ) \
+    .foreachBatch(lambda df, epoch_id: process_batch_with_dlq(
+        df=df,
+        epoch_id=epoch_id,
+        table_name="device_metrics",
+        properties={
+            "user": postgres_properties["user"],
+            "password": postgres_properties["password"],
+            "driver": postgres_properties["driver"]
+        }
+    )) \
     .outputMode("append") \
     .option("checkpointLocation", "/tmp/checkpoints/device_metrics") \
     .start()
 
-# Write location metrics to Postgres in real-time
+# Write location metrics to Postgres in real-time with error handling
 location_metrics_query = location_metrics_df \
     .transform(transform_time_window) \
     .writeStream \
-    .foreachBatch(lambda df, epoch_id: df.write \
-        .jdbc(
-            url=postgres_properties["url"],
-            table="location_metrics",
-            mode="append",
-            properties={
-                "user": postgres_properties["user"],
-                "password": postgres_properties["password"],
-                "driver": postgres_properties["driver"]
-            }
-        )
-    ) \
+    .foreachBatch(lambda df, epoch_id: process_batch_with_dlq(
+        df=df,
+        epoch_id=epoch_id,
+        table_name="location_metrics",
+        properties={
+            "user": postgres_properties["user"],
+            "password": postgres_properties["password"],
+            "driver": postgres_properties["driver"]
+        }
+    )) \
     .outputMode("append") \
     .option("checkpointLocation", "/tmp/checkpoints/location_metrics") \
     .start()
 
-# Write hourly metrics to Postgres in real-time
+# Write hourly metrics to Postgres in real-time with error handling
 hourly_metrics_query = hourly_metrics_df \
     .transform(transform_time_window) \
     .writeStream \
-    .foreachBatch(lambda df, epoch_id: df.write \
-        .jdbc(
-            url=postgres_properties["url"],
-            table="hourly_metrics",
-            mode="append",
-            properties={
-                "user": postgres_properties["user"],
-                "password": postgres_properties["password"],
-                "driver": postgres_properties["driver"]
-            }
-        )
-    ) \
+    .foreachBatch(lambda df, epoch_id: process_batch_with_dlq(
+        df=df,
+        epoch_id=epoch_id,
+        table_name="hourly_metrics",
+        properties={
+            "user": postgres_properties["user"],
+            "password": postgres_properties["password"],
+            "driver": postgres_properties["driver"]
+        }
+    )) \
     .outputMode("append") \
     .option("checkpointLocation", "/tmp/checkpoints/hourly_metrics") \
     .start()
 
-# Write raw events to Postgres in real-time
+# Write raw events to Postgres in real-time with error handling and dead letter queue
 raw_events_query = parsed_stream_df \
     .writeStream \
-    .foreachBatch(lambda df, epoch_id: df.write \
-        .jdbc(
-            url=postgres_properties["url"],
-            table="stream_events",
-            mode="append",
-            properties={
-                "user": postgres_properties["user"],
-                "password": postgres_properties["password"],
-                "driver": postgres_properties["driver"],
-                "stringtype": "unspecified"
-            }
-        )
-    ) \
+    .foreachBatch(lambda df, epoch_id: process_batch_with_dlq(
+        df=df,
+        epoch_id=epoch_id,
+        table_name="stream_events",
+        properties={
+            "user": postgres_properties["user"],
+            "password": postgres_properties["password"],
+            "driver": postgres_properties["driver"],
+            "stringtype": "unspecified"
+        }
+    )) \
     .outputMode("append") \
     .option("checkpointLocation", "/tmp/checkpoints/raw_events") \
     .start()

@@ -88,7 +88,10 @@ The architecture follows a modern streaming data pipeline pattern:
 - **Real-time Processing**: Events are processed as they arrive
 - **Scalable Architecture**: All components can scale horizontally
 - **Comprehensive Analytics**: Multiple metrics computed across various dimensions
-- **Fault Tolerance**: Retry logic and error handling throughout the pipeline
+- **Fault Tolerance**: 
+  - Retry logic and error handling throughout the pipeline
+  - Dead letter queue for handling database errors and foreign key violations
+  - Intelligent error recovery that preserves valid records while isolating problematic ones
 - **Interactive Visualization**: Dashboards for exploring the data from different angles
 
 ## Future Enhancements
