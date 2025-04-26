@@ -137,6 +137,16 @@ The Spark streaming job uses a watermark of 10 minutes on the timestamp column. 
 
 Watermarks are required when using append output mode with streaming aggregations that use window functions. They help manage state and handle late-arriving data in a streaming context.
 
+### Note on Approximate Distinct Counts
+
+For metrics that count unique users or songs (like unique_users and unique_songs), the streaming job uses `approx_count_distinct()` instead of `COUNT(DISTINCT)`. This is because Spark Structured Streaming doesn't support exact distinct counts in streaming queries.
+
+The approximate count distinct function:
+- Provides an estimate of the number of distinct items
+- Has a small margin of error (typically 2-5%)
+- Uses significantly less memory than exact counts
+- Is the recommended approach for distinct counting in streaming applications
+
 ## Step 9: Copy the PostgreSQL JDBC Driver
 
 Copy the PostgreSQL JDBC driver to the Spark master container:

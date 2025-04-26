@@ -110,8 +110,8 @@ location_metrics_df = spark.sql("""
         window(timestamp, '5 minutes') as time_window,
         location_id,
         COUNT(*) as stream_count,
-        COUNT(DISTINCT user_id) as unique_users,
-        COUNT(DISTINCT song_id) as unique_songs
+        approx_count_distinct(user_id) as unique_users,
+        approx_count_distinct(song_id) as unique_songs
     FROM stream_events
     GROUP BY window(timestamp, '5 minutes'), location_id
 """)
@@ -121,9 +121,9 @@ hourly_metrics_df = spark.sql("""
     SELECT 
         window(timestamp, '1 hour') as time_window,
         COUNT(*) as stream_count,
-        COUNT(DISTINCT user_id) as unique_users,
-        COUNT(DISTINCT song_id) as unique_songs,
-        COUNT(DISTINCT artist_id) as unique_artists,
+        approx_count_distinct(user_id) as unique_users,
+        approx_count_distinct(song_id) as unique_songs,
+        approx_count_distinct(artist_id) as unique_artists,
         SUM(stream_duration_seconds) as total_listen_time,
         AVG(stream_duration_seconds) as avg_listen_time,
         SUM(CASE WHEN is_skipped THEN 1 ELSE 0 END) / COUNT(*) as skip_rate,

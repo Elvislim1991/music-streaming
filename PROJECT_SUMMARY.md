@@ -48,6 +48,7 @@ This project implements a real-time music streaming analytics pipeline using Apa
   - Device metrics (stream count, average listen time, etc.)
   - Location metrics (stream count, unique users, etc.)
   - Hourly aggregated metrics
+- Used approximate distinct counting (approx_count_distinct) for unique user and song metrics
 - Configured Spark to write all metrics directly to PostgreSQL in real-time
 - Implemented time window transformations for proper timestamp handling
 - Added watermarks to handle late-arriving data and enable stateful processing with append mode
