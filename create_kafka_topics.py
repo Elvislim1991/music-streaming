@@ -278,7 +278,7 @@ def create_topics():
 def main():
     """Main function to create topics with retry logic"""
     max_retries = 5
-    retry_interval = 5  # seconds
+    retry_interval = 20  # seconds
 
     for attempt in range(1, max_retries + 1):
         print(f"Attempt {attempt}/{max_retries} to create Kafka topics")
