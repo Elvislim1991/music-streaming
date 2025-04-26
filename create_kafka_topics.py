@@ -1,0 +1,182 @@
+import os
+import socket
+import time
+from kafka.admin import KafkaAdminClient, NewTopic
+from kafka.errors import TopicAlreadyExistsError, NoBrokersAvailable, KafkaError
+
+# Get Kafka host from environment variable or use the hostname if not set
+kafka_host = os.environ.get('KAFKA_HOST')
+if not kafka_host:
+    # Try to get the hostname or IP address that might work better with Docker
+    kafka_host = socket.gethostname()
+    print(f"KAFKA_HOST not set, using hostname: {kafka_host}")
+
+    # Fallback to localhost if needed
+    if kafka_host == 'localhost' or not kafka_host:
+        kafka_host = 'localhost'
+        print("Using localhost as fallback")
+
+bootstrap_servers = f'{kafka_host}:9092'
+print(f"Attempting to connect to Kafka at {bootstrap_servers}")
+
+# Define topics and their configurations
+topics_config = [
+    # Dimension tables - fewer partitions as they're smaller and less frequently updated
+    {
+        'name': 'users',
+        'partitions': 3,
+        'replication_factor': 1,
+        'config': {
+            'retention.ms': str(7 * 24 * 60 * 60 * 1000),  # 7 days retention
+            'cleanup.policy': 'compact'  # Keep the latest value for each key
+        }
+    },
+    {
+        'name': 'artists',
+        'partitions': 3,
+        'replication_factor': 1,
+        'config': {
+            'retention.ms': str(7 * 24 * 60 * 60 * 1000),
+            'cleanup.policy': 'compact'
+        }
+    },
+    {
+        'name': 'albums',
+        'partitions': 3,
+        'replication_factor': 1,
+        'config': {
+            'retention.ms': str(7 * 24 * 60 * 60 * 1000),
+            'cleanup.policy': 'compact'
+        }
+    },
+    {
+        'name': 'songs',
+        'partitions': 5,
+        'replication_factor': 1,
+        'config': {
+            'retention.ms': str(7 * 24 * 60 * 60 * 1000),
+            'cleanup.policy': 'compact'
+        }
+    },
+    {
+        'name': 'devices',
+        'partitions': 2,
+        'replication_factor': 1,
+        'config': {
+            'retention.ms': str(7 * 24 * 60 * 60 * 1000),
+            'cleanup.policy': 'compact'
+        }
+    },
+    {
+        'name': 'locations',
+        'partitions': 3,
+        'replication_factor': 1,
+        'config': {
+            'retention.ms': str(7 * 24 * 60 * 60 * 1000),
+            'cleanup.policy': 'compact'
+        }
+    },
+    # Stream events - more partitions for higher throughput
+    {
+        'name': 'stream-events',
+        'partitions': 10,
+        'replication_factor': 1,
+        'config': {
+            'retention.ms': str(3 * 24 * 60 * 60 * 1000),  # 3 days retention
+            'cleanup.policy': 'delete'  # Delete old records
+        }
+    }
+]
+
+def create_topics():
+    """Create Kafka topics with specified configurations"""
+    try:
+        # Create admin client
+        admin_client = KafkaAdminClient(
+            bootstrap_servers=bootstrap_servers,
+            client_id='music-streaming-admin',
+            api_version=(2, 5, 0)
+        )
+        
+        # Get existing topics
+        try:
+            existing_topics = admin_client.list_topics()
+            print(f"Existing topics: {existing_topics}")
+        except Exception as e:
+            print(f"Warning: Could not list existing topics: {e}")
+            existing_topics = []
+        
+        # Create new topics
+        new_topics = []
+        for topic_config in topics_config:
+            if topic_config['name'] not in existing_topics:
+                new_topics.append(
+                    NewTopic(
+                        name=topic_config['name'],
+                        num_partitions=topic_config['partitions'],
+                        replication_factor=topic_config['replication_factor'],
+                        topic_configs=topic_config['config']
+                    )
+                )
+            else:
+                print(f"Topic '{topic_config['name']}' already exists")
+        
+        if new_topics:
+            print(f"Creating {len(new_topics)} topics...")
+            admin_client.create_topics(new_topics=new_topics, validate_only=False)
+            print("Topics created successfully")
+        else:
+            print("No new topics to create")
+        
+        # Close the admin client
+        admin_client.close()
+        return True
+    
+    except TopicAlreadyExistsError:
+        print("Some topics already exist. Continuing...")
+        return True
+    
+    except NoBrokersAvailable as e:
+        print(f"No Kafka brokers available: {e}")
+        print("\nThis usually means the Kafka broker is not running or not accessible.")
+        print("Make sure your Docker containers are running:")
+        print("docker-compose -f kafka-docker-compose.yml ps")
+        print("docker-compose -f kafka-docker-compose.yml logs broker")
+        return False
+    
+    except KafkaError as e:
+        print(f"Error connecting to Kafka: {e}")
+        print("\nTry setting the KAFKA_HOST environment variable to the IP address of your Kafka broker")
+        print("For example: export KAFKA_HOST=192.168.1.100")
+        
+        print("\nAdditional troubleshooting:")
+        print("1. Check if Docker is running the Kafka container:")
+        print("   docker ps | grep broker")
+        print("2. Check Kafka broker logs:")
+        print("   docker-compose -f kafka-docker-compose.yml logs broker")
+        print("3. Restart the Kafka broker:")
+        print("   docker-compose -f kafka-docker-compose.yml restart broker")
+        return False
+
+def main():
+    """Main function to create topics with retry logic"""
+    max_retries = 5
+    retry_interval = 5  # seconds
+    
+    for attempt in range(1, max_retries + 1):
+        print(f"Attempt {attempt}/{max_retries} to create Kafka topics")
+        
+        if create_topics():
+            print("All topics created or already exist")
+            return 0
+        
+        if attempt < max_retries:
+            print(f"Retrying in {retry_interval} seconds...")
+            time.sleep(retry_interval)
+    
+    print(f"Failed to create topics after {max_retries} attempts")
+    return 1
+
+if __name__ == "__main__":
+    exit_code = main()
+    exit(exit_code)
