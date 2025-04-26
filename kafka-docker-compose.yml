@@ -2,6 +2,7 @@
 networks:
   streaming-network:
     driver: bridge
+    name: streaming-network
 
 services:
 

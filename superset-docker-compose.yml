@@ -1,7 +1,6 @@
 networks:
   streaming-network:
     external: true
-    name: music-streaming_streaming-network
 
 services:
   redis:
