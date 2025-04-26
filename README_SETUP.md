@@ -77,6 +77,8 @@ The script supports the following command-line options:
 
 ## Troubleshooting
 
+### General Issues
+
 If you encounter issues:
 
 1. Check the logs of the specific service:
@@ -89,6 +91,42 @@ If you encounter issues:
 3. Verify that the required ports are available on your system.
 
 4. Check that the KAFKA_HOST environment variable is set correctly.
+
+### Kafka Connectivity Issues
+
+If the script gets stuck when creating Kafka topics (especially on Raspberry Pi):
+
+1. **Check Kafka Connectivity**: Test if you can connect to Kafka using both the internal and external addresses:
+   ```bash
+   # Test internal connectivity
+   telnet localhost 29092
+
+   # Test external connectivity (using your IP address)
+   telnet $(hostname -I | awk '{print $1}') 9092
+   ```
+
+2. **Try Using Localhost**: If external connectivity fails but internal works, try:
+   ```bash
+   export KAFKA_HOST=localhost
+   ./setup.sh
+   ```
+
+3. **Check Docker Network**: Make sure the Docker network is properly configured:
+   ```bash
+   docker network inspect streaming-network
+   ```
+
+4. **Restart Kafka**: Try restarting the Kafka container:
+   ```bash
+   docker-compose -f kafka-docker-compose.yml restart broker
+   ```
+
+5. **Check Firewall**: Make sure your firewall isn't blocking the required ports:
+   ```bash
+   sudo ufw status
+   ```
+
+The setup script now includes improved error handling and will automatically try alternative connection methods if the default one fails.
 
 ## Shutting Down
 

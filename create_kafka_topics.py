@@ -19,6 +19,8 @@ use_external = args.external or os.environ.get('USE_EXTERNAL_KAFKA', 'false').lo
 if use_internal:
     bootstrap_servers = 'broker:29092'
     print("Using internal Kafka bootstrap server: broker:29092")
+    # Add localhost:29092 as a fallback
+    fallback_servers = ['localhost:29092']
 elif use_external:
     # Get Kafka host from environment variable or use the hostname if not set
     kafka_host = os.environ.get('KAFKA_HOST')
@@ -34,10 +36,17 @@ elif use_external:
 
     bootstrap_servers = f'{kafka_host}:9092'
     print(f"Using external Kafka bootstrap server: {bootstrap_servers}")
+    # Add fallback servers
+    fallback_servers = ['localhost:9092', 'broker:29092', 'localhost:29092']
 else:
     # Default to internal for better compatibility with consumer commands
     bootstrap_servers = 'broker:29092'
     print("Using default internal Kafka bootstrap server: broker:29092")
+    # Add localhost:29092 as a fallback
+    fallback_servers = ['localhost:29092']
+
+# Print all servers we'll try
+print(f"Will try the following servers in order: {bootstrap_servers}, then {', '.join(fallback_servers)}")
 
 print(f"Attempting to connect to Kafka at {bootstrap_servers}")
 
@@ -110,19 +119,25 @@ topics_config = [
     }
 ]
 
-def create_topics():
-    """Create Kafka topics with specified configurations"""
+def try_create_topics(server):
+    """Try to create topics using the specified bootstrap server"""
+    print(f"\nAttempting to connect to Kafka at {server}")
     try:
-        # Create admin client
+        # Create admin client with timeouts
         admin_client = KafkaAdminClient(
-            bootstrap_servers=bootstrap_servers,
+            bootstrap_servers=server,
             client_id='music-streaming-admin',
-            api_version=(2, 5, 0)
+            api_version=(2, 5, 0),
+            request_timeout_ms=10000,  # 10 seconds timeout for requests
+            connections_max_idle_ms=30000,  # 30 seconds max idle time
+            retry_backoff_ms=500,  # 0.5 seconds backoff between retries
+            socket_timeout_ms=10000  # 10 seconds socket timeout
         )
 
         # Get existing topics
         try:
             existing_topics = admin_client.list_topics()
+            print(f"Successfully connected to {server}!")
             print(f"Existing topics: {existing_topics}")
         except Exception as e:
             print(f"Warning: Could not list existing topics: {e}")
@@ -159,26 +174,54 @@ def create_topics():
         return True
 
     except NoBrokersAvailable as e:
-        print(f"No Kafka brokers available: {e}")
-        print("\nThis usually means the Kafka broker is not running or not accessible.")
-        print("Make sure your Docker containers are running:")
-        print("docker-compose -f kafka-docker-compose.yml ps")
-        print("docker-compose -f kafka-docker-compose.yml logs broker")
+        print(f"No Kafka brokers available at {server}: {e}")
         return False
 
     except KafkaError as e:
-        print(f"Error connecting to Kafka: {e}")
-        print("\nTry setting the KAFKA_HOST environment variable to the IP address of your Kafka broker")
-        print("For example: export KAFKA_HOST=192.168.1.100")
-
-        print("\nAdditional troubleshooting:")
-        print("1. Check if Docker is running the Kafka container:")
-        print("   docker ps | grep broker")
-        print("2. Check Kafka broker logs:")
-        print("   docker-compose -f kafka-docker-compose.yml logs broker")
-        print("3. Restart the Kafka broker:")
-        print("   docker-compose -f kafka-docker-compose.yml restart broker")
+        print(f"Error connecting to Kafka at {server}: {e}")
         return False
+
+    except Exception as e:
+        print(f"Unexpected error connecting to {server}: {e}")
+        return False
+
+def create_topics():
+    """Create Kafka topics with specified configurations, trying fallback servers if needed"""
+    # First try the primary bootstrap server
+    if try_create_topics(bootstrap_servers):
+        return True
+
+    print(f"\nFailed to connect to primary server {bootstrap_servers}. Trying fallback servers...")
+
+    # If that fails, try each fallback server
+    for server in fallback_servers:
+        print(f"\nTrying fallback server: {server}")
+        if try_create_topics(server):
+            return True
+
+    # If all servers fail, print troubleshooting information
+    print("\n=== TROUBLESHOOTING INFORMATION ===")
+    print("All Kafka bootstrap servers failed. This usually means:")
+    print("1. The Kafka broker is not running or not accessible")
+    print("2. There's a network configuration issue")
+    print("3. The Docker container is not properly configured")
+
+    print("\nTry the following:")
+    print("1. Check if Docker is running the Kafka container:")
+    print("   docker ps | grep broker")
+    print("2. Check Kafka broker logs:")
+    print("   docker-compose -f kafka-docker-compose.yml logs broker")
+    print("3. Test connectivity:")
+    print("   telnet localhost 29092")
+    print("   telnet localhost 9092")
+    print("4. Restart the Kafka broker:")
+    print("   docker-compose -f kafka-docker-compose.yml restart broker")
+    print("5. Set the KAFKA_HOST environment variable to your machine's IP address:")
+    print("   export KAFKA_HOST=$(hostname -I | awk '{print $1}')")
+    print("   or")
+    print("   export KAFKA_HOST=localhost")
+
+    return False
 
 def main():
     """Main function to create topics with retry logic"""
