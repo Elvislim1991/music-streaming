@@ -71,7 +71,7 @@ check_prerequisites() {
     
     # Install required Python packages
     echo "Installing required Python packages..."
-    pip3 install kafka-python faker pyspark psycopg2-binary matplotlib pandas
+    pip3 install kafka-python faker
     
     echo "All prerequisites are satisfied."
 }
