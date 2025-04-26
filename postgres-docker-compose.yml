@@ -1,8 +1,7 @@
-pversion: '3'
-
 networks:
   streaming-network:
     external: true
+    name: music-streaming_streaming-network
 
 services:
   postgres:
