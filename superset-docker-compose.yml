@@ -5,6 +5,20 @@ networks:
     external: true
 
 services:
+  redis:
+    image: redis:7.0
+    container_name: redis
+    networks:
+      - streaming-network
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
   superset:
     image: apache/superset:latest
     container_name: superset
@@ -12,6 +26,7 @@ services:
       - streaming-network
     depends_on:
       - postgres
+      - redis
     ports:
       - "8088:8088"
     environment:
@@ -22,8 +37,15 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
+      # Configure Superset to use PostgreSQL for metadata
+      SQLALCHEMY_DATABASE_URI: 'postgresql://postgres:postgres@postgres:5432/music_streaming'
+      # Configure Redis for rate limiting
+      FLASK_APP: 'superset'
+      SUPERSET_REDIS_HOST: 'redis'
+      SUPERSET_REDIS_PORT: '6379'
     volumes:
       - superset_home:/app/superset_home
+      - ./superset_init.sh:/app/superset_init.sh
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8088/health"]
       interval: 10s
@@ -31,15 +53,7 @@ services:
       retries: 5
     restart: unless-stopped
     command: >
-      bash -c "superset db upgrade &&
-              superset fab create-admin
-                        --username admin
-                        --firstname Admin
-                        --lastname User
-                        --email admin@example.com
-                        --password admin &&
-              superset init &&
-              superset run -p 8088 --with-threads --reload --debugger"
+      bash -c "chmod +x /app/superset_init.sh && /app/superset_init.sh"
 
 volumes:
   superset_home:
